@@ -1,0 +1,351 @@
+@inherits LayoutComponentBase
+@inject SafariPlus.Services.BrowserState State
+@implements IDisposable
+
+<div class="safari-window">
+    <!-- Safari Glassmorphic Header Toolbar -->
+    <header class="safari-header">
+        <div class="safari-toolbar">
+            <!-- Traffic Lights -->
+            <div class="traffic-lights">
+                <span class="traffic-dot close" title="Close Window"></span>
+                <span class="traffic-dot minimize" title="Minimize"></span>
+                <span class="traffic-dot maximize" title="Zoom"></span>
+            </div>
+
+            <!-- Sidebar Toggle -->
+            <button class="safari-btn @(State.IsSidebarOpen ? "active" : "")" @onclick="ToggleSidebar" title="Toggle Sidebar (⌘I)">
+                📖
+            </button>
+
+            <!-- Navigation Buttons -->
+            <button class="safari-btn" title="Back" @onclick="GoBack">
+                ◄
+            </button>
+            <button class="safari-btn" title="Forward" @onclick="GoForward">
+                ►
+            </button>
+            <button class="safari-btn" title="Reload Page" @onclick="ReloadCurrentTab">
+                🔄
+            </button>
+
+            <!-- Unified Address & Search Bar -->
+            <div class="address-bar-container">
+                <div class="address-bar">
+                    <!-- Privacy Shield -->
+                    <div class="shield-icon" @onclick='() => SetSidebarTab("privacy")' title="Intelligent Tracking Protection">
+                        🛡️
+                        @if (State.ActiveTab.TrackersBlocked > 0)
+                        {
+                            <span style="font-size: 11px; background: #34c759; color: white; padding: 1px 5px; border-radius: 8px; font-weight: bold;">
+                                @State.ActiveTab.TrackersBlocked
+                            </span>
+                        }
+                    </div>
+
+                    <!-- Address Input -->
+                    <input class="address-input"
+                           placeholder="Search or enter website name"
+                           @bind="State.AddressBarInput"
+                           @bind:event="oninput"
+                           @onkeydown="HandleAddressKeyDown" />
+
+                    <!-- Reader Mode Button (aA) -->
+                    @if (State.ActiveTab.IsReaderAvailable)
+                    {
+                        <button class="reader-btn @(State.ActiveTab.IsReaderMode ? "active" : "")"
+                                @onclick="ToggleReader"
+                                title="Toggle Reader Mode (aA)">
+                            aA
+                        </button>
+                    }
+
+                    @if (State.ActiveTab.IsLoading)
+                    {
+                        <span style="font-size: 12px; color: var(--safari-accent);">⏳</span>
+                    }
+                </div>
+            </div>
+
+            <!-- Quick Action Icons -->
+            <button class="safari-btn" title="Add to Reading List" @onclick="SaveCurrentToReadingList">
+                👓
+            </button>
+            <button class="safari-btn" title="Add Quick Note" @onclick="AddNoteForCurrentPage">
+                📝
+            </button>
+            <button class="safari-btn" title="Add Bookmark" @onclick="BookmarkCurrentPage">
+                ⭐
+            </button>
+            <button class="safari-btn" title="New Tab (⌘T)" @onclick='() => State.AddTab("about:start")'>
+                ➕
+            </button>
+        </div>
+
+        <!-- Safari Tab Bar -->
+        <div class="safari-tab-bar">
+            @foreach (var tab in State.Tabs)
+            {
+                <div class="safari-tab @(tab.IsActive ? "active" : "")" @onclick="() => State.SelectTab(tab)">
+                    <span>@tab.Favicon</span>
+                    <span class="tab-title">@tab.Title</span>
+                    @if (tab.IsPinned)
+                    {
+                        <span style="font-size: 10px;">📌</span>
+                    }
+                    <span class="tab-close" @onclick:stopPropagation="true" @onclick="() => State.CloseTab(tab)">✕</span>
+                </div>
+            }
+            <button class="tab-add-btn" @onclick='() => State.AddTab("about:start")' title="Open New Tab">+</button>
+        </div>
+    </header>
+
+    <!-- Body Layout (Sidebar + Web Viewport) -->
+    <div class="safari-body">
+        <!-- Safari Sidebar -->
+        <aside class="safari-sidebar @(State.IsSidebarOpen ? "" : "closed")">
+            <nav class="sidebar-nav">
+                <button class="safari-btn @(State.ActiveSidebarTab == "favorites" ? "active" : "")"
+                        @onclick='() => SetSidebarTab("favorites")' title="Favorites">
+                    ⭐
+                </button>
+                <button class="safari-btn @(State.ActiveSidebarTab == "readinglist" ? "active" : "")"
+                        @onclick='() => SetSidebarTab("readinglist")' title="Reading List">
+                    👓
+                </button>
+                <button class="safari-btn @(State.ActiveSidebarTab == "notes" ? "active" : "")"
+                        @onclick='() => SetSidebarTab("notes")' title="Quick Notes">
+                    📝
+                </button>
+                <button class="safari-btn @(State.ActiveSidebarTab == "history" ? "active" : "")"
+                        @onclick='() => SetSidebarTab("history")' title="History">
+                    🕒
+                </button>
+                <button class="safari-btn @(State.ActiveSidebarTab == "privacy" ? "active" : "")"
+                        @onclick='() => SetSidebarTab("privacy")' title="Privacy Telemetry">
+                    🛡️
+                </button>
+                <button class="safari-btn @(State.ActiveSidebarTab == "passwords" ? "active" : "")"
+                        @onclick='() => SetSidebarTab("passwords")' title="Passwords">
+                    🔑
+                </button>
+            </nav>
+
+            <div class="sidebar-content">
+                @if (State.ActiveSidebarTab == "favorites")
+                {
+                    <h6 style="font-weight: 600; margin-bottom: 12px; color: var(--safari-text-secondary); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">
+                        Favorites & Bookmarks
+                    </h6>
+                    @foreach (var bm in State.Bookmarks)
+                    {
+                        <div class="sidebar-item" @onclick="() => Navigate(bm.Url)">
+                            <span>@bm.Icon</span>
+                            <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                <div>@bm.Title</div>
+                                <div style="font-size: 11px; color: var(--safari-text-secondary);">@bm.Url</div>
+                            </div>
+                            <span style="font-size: 12px; color: #ff3b30; cursor: pointer;"
+                                  @onclick:stopPropagation="true"
+                                  @onclick="() => State.RemoveBookmark(bm.Id)">✕</span>
+                        </div>
+                    }
+                }
+                else if (State.ActiveSidebarTab == "readinglist")
+                {
+                    <h6 style="font-weight: 600; margin-bottom: 12px; color: var(--safari-text-secondary); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">
+                        Reading List (@State.ReadingList.Count(r => !r.IsRead) Unread)
+                    </h6>
+                    @foreach (var item in State.ReadingList)
+                    {
+                        <div class="sidebar-item" style="flex-direction: column; align-items: flex-start; gap: 4px;" @onclick="() => Navigate(item.Url)">
+                            <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                                <strong style="font-size: 13px; text-decoration: @(item.IsRead ? "line-through" : "none"); opacity: @(item.IsRead ? 0.6 : 1.0)">
+                                    @item.Title
+                                </strong>
+                                <span style="font-size: 11px; color: #ff3b30; cursor: pointer;"
+                                      @onclick:stopPropagation="true"
+                                      @onclick="() => State.RemoveFromReadingList(item.Id)">✕</span>
+                            </div>
+                            <div style="font-size: 11.5px; color: var(--safari-text-secondary); line-height: 1.3;">
+                                @item.PreviewText
+                            </div>
+                            <div style="display: flex; justify-content: space-between; width: 100%; font-size: 10.5px; color: #0071e3; margin-top: 4px;">
+                                <span>@item.Domain</span>
+                                <span style="cursor: pointer;" @onclick:stopPropagation="true" @onclick="() => State.ToggleReadingListRead(item.Id)">
+                                    @(item.IsRead ? "Mark Unread" : "Mark Read")
+                                </span>
+                            </div>
+                        </div>
+                    }
+                }
+                else if (State.ActiveSidebarTab == "notes")
+                {
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <h6 style="font-weight: 600; color: var(--safari-text-secondary); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; margin: 0;">
+                            Quick Notes
+                        </h6>
+                        <button class="safari-btn" style="font-size: 11px; padding: 2px 6px; background: rgba(0,113,227,0.1); color: #0071e3;" @onclick="CreateNewEmptyNote">
+                            + New Note
+                        </button>
+                    </div>
+
+                    @foreach (var note in State.QuickNotes)
+                    {
+                        <div style="background: @note.Color; padding: 12px; border-radius: 10px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); color: #222;">
+                            <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 13px; margin-bottom: 6px;">
+                                <span>@note.Title</span>
+                                <span style="cursor: pointer; font-size: 11px; color: #888;" @onclick="() => State.DeleteQuickNote(note.Id)">✕</span>
+                            </div>
+                            <div style="font-size: 12px; line-height: 1.4; white-space: pre-wrap;">@note.Content</div>
+                            @if (!string.IsNullOrEmpty(note.SourceUrl))
+                            {
+                                <div style="font-size: 10px; color: #555; margin-top: 6px; text-overflow: ellipsis; overflow: hidden;">
+                                    Source: @note.SourceUrl
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+                else if (State.ActiveSidebarTab == "history")
+                {
+                    <h6 style="font-weight: 600; margin-bottom: 12px; color: var(--safari-text-secondary); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">
+                        Browsing History
+                    </h6>
+                    @foreach (var hist in State.History)
+                    {
+                        <div class="sidebar-item" @onclick="() => Navigate(hist.Url)">
+                            <span>🕒</span>
+                            <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                <div>@hist.Title</div>
+                                <div style="font-size: 10.5px; color: var(--safari-text-secondary);">@hist.VisitedAt.ToString("g")</div>
+                            </div>
+                        </div>
+                    }
+                }
+                else if (State.ActiveSidebarTab == "privacy")
+                {
+                    <h6 style="font-weight: 600; margin-bottom: 12px; color: var(--safari-text-secondary); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">
+                        Privacy Report (ITP)
+                    </h6>
+                    <div style="background: rgba(52, 199, 89, 0.12); padding: 12px; border-radius: 10px; margin-bottom: 14px;">
+                        <div style="font-size: 24px; font-weight: 700; color: #34c759;">@State.TrackerBlocker.TotalBlockedCount</div>
+                        <div style="font-size: 12px; color: var(--safari-text-secondary);">Trackers Blocked from Profiling You</div>
+                    </div>
+
+                    @foreach (var tracker in State.TrackerBlocker.GetBlockedTrackersSummary())
+                    {
+                        <div class="sidebar-item" style="justify-content: space-between;">
+                            <div>
+                                <div style="font-weight: 500; font-size: 12.5px;">@tracker.Domain</div>
+                                <div style="font-size: 11px; color: var(--safari-text-secondary);">@tracker.Category</div>
+                            </div>
+                            <span style="background: rgba(0,113,227,0.1); color: #0071e3; padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 11px;">
+                                @tracker.TimesBlocked
+                            </span>
+                        </div>
+                    }
+                }
+                else if (State.ActiveSidebarTab == "passwords")
+                {
+                    <h6 style="font-weight: 600; margin-bottom: 12px; color: var(--safari-text-secondary); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">
+                        Password Vault
+                    </h6>
+                    @foreach (var pass in State.Passwords)
+                    {
+                        <div class="sidebar-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+                            <div style="display: flex; justify-content: space-between; width: 100%;">
+                                <strong>@pass.Website</strong>
+                                <span style="font-size: 11px; color: #ff3b30; cursor: pointer;" @onclick="() => State.DeletePasswordCredential(pass.Id)">✕</span>
+                            </div>
+                            <div style="font-size: 11.5px; color: var(--safari-text-secondary);">User: @pass.Username</div>
+                            <div style="font-size: 11.5px; color: var(--safari-text-secondary);">Pass: @pass.Password</div>
+                        </div>
+                    }
+                }
+            </div>
+        </aside>
+
+        <!-- Main Web Viewport Content -->
+        <main class="web-viewport">
+            @Body
+        </main>
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        State.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        State.OnChange -= StateHasChanged;
+    }
+
+    private void ToggleSidebar()
+    {
+        State.IsSidebarOpen = !State.IsSidebarOpen;
+    }
+
+    private void SetSidebarTab(string tab)
+    {
+        State.ActiveSidebarTab = tab;
+        State.IsSidebarOpen = true;
+    }
+
+    private async Task HandleAddressKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await State.NavigateToUrlAsync(State.AddressBarInput);
+        }
+    }
+
+    private async Task Navigate(string url)
+    {
+        await State.NavigateToUrlAsync(url);
+    }
+
+    private void ToggleReader()
+    {
+        State.ToggleReaderMode();
+    }
+
+    private void SaveCurrentToReadingList()
+    {
+        State.AddToReadingList(State.ActiveTab.Title, State.ActiveTab.Url);
+    }
+
+    private void BookmarkCurrentPage()
+    {
+        State.AddBookmark(State.ActiveTab.Title, State.ActiveTab.Url);
+    }
+
+    private void AddNoteForCurrentPage()
+    {
+        State.AddQuickNote($"Note on {State.ActiveTab.Title}", $"Snippet saved while viewing {State.ActiveTab.Url}", State.ActiveTab.Url);
+        SetSidebarTab("notes");
+    }
+
+    private void CreateNewEmptyNote()
+    {
+        State.AddQuickNote("New Quick Note", "Type research notes here...", State.ActiveTab.Url);
+    }
+
+    private void GoBack()
+    {
+        // Simulated history back navigation
+    }
+
+    private void GoForward()
+    {
+        // Simulated history forward navigation
+    }
+
+    private async Task ReloadCurrentTab()
+    {
+        await State.NavigateToUrlAsync(State.ActiveTab.Url);
+    }
+}

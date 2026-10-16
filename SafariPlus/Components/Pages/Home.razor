@@ -1,0 +1,198 @@
+@page "/"
+@inject SafariPlus.Services.BrowserState State
+@implements IDisposable
+
+<PageTitle>@(State.ActiveTab?.Title ?? "Safari Plus")</PageTitle>
+
+@if (State.ActiveTab.Url == "about:start" || string.IsNullOrEmpty(State.ActiveTab.Url))
+{
+    <!-- Safari Interactive Start Page -->
+    <div class="start-page">
+        <div class="start-header">
+            <div style="font-size: 48px; margin-bottom: 10px;">🧭</div>
+            <h1 class="start-greeting">Safari Plus</h1>
+            <p style="color: var(--safari-text-secondary); font-size: 16px;">
+                Fast. Private. Glassmorphic Next-Gen Web Browsing.
+            </p>
+
+            <!-- Big Central Search Input -->
+            <div style="max-width: 540px; margin: 24px auto; position: relative;">
+                <input style="width: 100%; padding: 14px 20px 14px 44px; border-radius: 24px; border: 1px solid var(--safari-border); background: rgba(255,255,255,0.9); box-shadow: var(--safari-shadow); font-size: 15px; outline: none;"
+                       placeholder="Search Google or enter web address..."
+                       @bind="SearchInput"
+                       @onkeydown="HandleStartSearchKeyDown" />
+                <span style="position: absolute; left: 16px; top: 14px; font-size: 16px;">🔍</span>
+            </div>
+        </div>
+
+        <!-- Favorites Grid -->
+        <h5 style="font-weight: 600; font-size: 15px; margin-bottom: 16px; color: var(--safari-text-secondary);">
+            Favorites
+        </h5>
+        <div class="favorites-grid">
+            @foreach (var fav in State.Bookmarks)
+            {
+                <div class="fav-card" @onclick="() => NavigateTo(fav.Url)">
+                    <div class="fav-icon-box">@fav.Icon</div>
+                    <span class="fav-label">@fav.Title</span>
+                </div>
+            }
+        </div>
+
+        <!-- Intelligent Tracking Protection Summary Card -->
+        <div class="privacy-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 24px;">🛡️</span>
+                    <div>
+                        <strong style="font-size: 16px;">Privacy Report</strong>
+                        <div style="font-size: 13px; color: var(--safari-text-secondary);">
+                            Intelligent Tracking Protection prevents trackers from following you across websites.
+                        </div>
+                    </div>
+                </div>
+                <button class="safari-btn" style="background: rgba(0,113,227,0.1); color: #0071e3; font-weight: 600; font-size: 12px; padding: 6px 12px;"
+                        @onclick='() => State.ActiveSidebarTab = "privacy"'>
+                    View Full Telemetry
+                </button>
+            </div>
+            <div style="display: flex; gap: 20px; font-size: 13px;">
+                <div><strong>@State.TrackerBlocker.TotalBlockedCount</strong> Trackers Prevented</div>
+                <div><strong>100%</strong> On-Device Processing</div>
+                <div><strong>Active</strong> Fingerprint Protection</div>
+            </div>
+        </div>
+
+        <!-- Quick Reading List & Snippets Grid -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div style="background: rgba(255,255,255,0.7); border-radius: 16px; padding: 20px; border: 1px solid var(--safari-border);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 12px; align-items: center;">
+                    <strong style="font-size: 14px;">👓 Reading List</strong>
+                    <span style="font-size: 12px; color: #0071e3; cursor: pointer;" @onclick='() => State.ActiveSidebarTab = "readinglist"'>See All</span>
+                </div>
+                @foreach (var r in State.ReadingList.Take(3))
+                {
+                    <div style="font-size: 13px; margin-bottom: 8px; cursor: pointer;" @onclick="() => NavigateTo(r.Url)">
+                        📄 @r.Title
+                    </div>
+                }
+            </div>
+
+            <div style="background: rgba(255,255,255,0.7); border-radius: 16px; padding: 20px; border: 1px solid var(--safari-border);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 12px; align-items: center;">
+                    <strong style="font-size: 14px;">📝 Quick Research Notes</strong>
+                    <span style="font-size: 12px; color: #0071e3; cursor: pointer;" @onclick='() => State.ActiveSidebarTab = "notes"'>See All</span>
+                </div>
+                @foreach (var n in State.QuickNotes.Take(2))
+                {
+                    <div style="font-size: 12.5px; margin-bottom: 8px; background: @n.Color; padding: 8px; border-radius: 8px;">
+                        📌 <strong>@n.Title</strong>: @n.Content
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+else if (State.ActiveTab.IsReaderMode)
+{
+    <!-- Safari Distraction-Free Reader Mode View -->
+    <div style="background: var(--safari-bg); min-height: 100%; padding: 20px;">
+        <!-- Reader Formatting Floating Controls Bar -->
+        <div style="max-width: 740px; margin: 0 auto 20px auto; background: rgba(255,255,255,0.9); backdrop-filter: blur(20px); border-radius: 30px; padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 15px rgba(0,0,0,0.08); border: 1px solid var(--safari-border);">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <button class="safari-btn" style="font-size: 12px;" @onclick="DecreaseFontSize">a</button>
+                <span style="font-size: 13px; font-weight: bold;">@State.ReaderSettings.FontSize px</span>
+                <button class="safari-btn" style="font-size: 16px; font-weight: bold;" @onclick="IncreaseFontSize">A</button>
+            </div>
+
+            <!-- Theme Picker -->
+            <div style="display: flex; gap: 8px;">
+                <span style="width: 24px; height: 24px; border-radius: 50%; background: #ffffff; border: 2px solid #ccc; cursor: pointer;"
+                      @onclick='() => SetTheme("light")' title="Light Theme"></span>
+                <span style="width: 24px; height: 24px; border-radius: 50%; background: #f8f1e3; border: 2px solid #d2b48c; cursor: pointer;"
+                      @onclick='() => SetTheme("sepia")' title="Sepia Theme"></span>
+                <span style="width: 24px; height: 24px; border-radius: 50%; background: #2c2c2e; border: 2px solid #555; cursor: pointer;"
+                      @onclick='() => SetTheme("dark")' title="Dark Theme"></span>
+                <span style="width: 24px; height: 24px; border-radius: 50%; background: #000000; border: 2px solid #333; cursor: pointer;"
+                      @onclick='() => SetTheme("night")' title="Night Theme"></span>
+            </div>
+
+            <button class="reader-btn active" @onclick="() => State.ToggleReaderMode()">
+                Exit Reader
+            </button>
+        </div>
+
+        <article class="reader-container reader-theme-@State.ReaderSettings.Theme"
+                 style="font-size: @(State.ReaderSettings.FontSize)px; line-height: 1.7; font-family: @State.ReaderSettings.FontFamily;">
+            <h1 style="font-size: 2.2em; font-weight: 700; margin-bottom: 10px; letter-spacing: -0.5px;">
+                @State.ActiveTab.ReaderTitle
+            </h1>
+            <div style="font-size: 0.9em; opacity: 0.7; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 1px solid rgba(0,0,0,0.1);">
+                @State.ActiveTab.ReaderByline
+            </div>
+
+            <div>
+                @((MarkupString)State.ActiveTab.ReaderContentHtml)
+            </div>
+        </article>
+    </div>
+}
+else
+{
+    <!-- Standard HTML Proxy / Web Page View -->
+    <div style="width: 100%; height: 100%; overflow-y: auto; background: white; padding: 20px;">
+        @((MarkupString)State.ActiveTab.RawHtml)
+    </div>
+}
+
+@code {
+    private string SearchInput { get; set; } = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        State.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        State.OnChange -= StateHasChanged;
+    }
+
+    private async Task HandleStartSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await State.NavigateToUrlAsync(SearchInput);
+            SearchInput = string.Empty;
+        }
+    }
+
+    private async Task NavigateTo(string url)
+    {
+        await State.NavigateToUrlAsync(url);
+    }
+
+    private void IncreaseFontSize()
+    {
+        if (State.ReaderSettings.FontSize < 32)
+        {
+            State.ReaderSettings.FontSize += 2;
+            State.NotifyStateChanged();
+        }
+    }
+
+    private void DecreaseFontSize()
+    {
+        if (State.ReaderSettings.FontSize > 12)
+        {
+            State.ReaderSettings.FontSize -= 2;
+            State.NotifyStateChanged();
+        }
+    }
+
+    private void SetTheme(string theme)
+    {
+        State.ReaderSettings.Theme = theme;
+        State.NotifyStateChanged();
+    }
+}
